@@ -1,0 +1,91 @@
+---
+title: "Homework 6"
+output: github_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+```
+
+
+# Problem 1
+
+```{r message=FALSE, warning=FALSE}
+homicide_df = read_csv("data/homicide-data.csv")
+
+homicide_df = 
+  homicide_df |>
+  mutate(
+    reported_date = ymd(substr(homicide_df$reported_date, 1, 8)),
+    city_state = paste(city, state, sep = ", "),
+    solved = case_when(
+      disposition %in% c("Open/No arrest", "Closed without arrest") ~ 0,
+      disposition == "Closed by arrest" ~ 1),
+    victim_age = as.numeric(victim_age)) |>
+  filter(
+    !(city_state %in% c("Dallas, TX",
+                        "Phoenix, AZ",
+                        "Kansas City, MO",
+                        "Tulsa, AL")),
+    victim_race %in% c("White", "Black"))
+
+```
+
+```{r}
+homicide_df |>
+  filter(city_state == "Baltimore, MD") |>
+  glm(solved ~ victim_age + victim_sex + victim_race, family = binomial(), data = _) |>
+  broom::tidy() |>
+  mutate(
+    or_estimate = exp(estimate),
+    or_lower = exp(estimate - std.error * 1.96),
+    or_upper = exp(estimate + std.error * 1.96)) |>
+  filter(term == "victim_sexMale") |>
+  select(term, or_estimate, or_lower, or_upper)
+```
+
+In Baltimore, MD, the adjusted odds ratio for solving homicides comparing male victims to female victims, keeping all other variables fixed, is 0.426 (95% CI: 0.325, 0.558).
+
+```{r}
+glm_city_state = function(df) {
+  
+  glm(solved ~ victim_age + victim_sex + victim_race, 
+      family = binomial(), 
+      data = df)
+  
+}
+
+city_state_glm_results = 
+  homicide_df |>
+  nest(data = -city_state) |>
+  mutate(
+    models = map(data, glm_city_state),
+    results = map(models, broom::tidy)) |>
+  select(city_state, results) |>
+  unnest(results) |>
+  mutate(
+    or_estimate = exp(estimate),
+    or_lower = exp(estimate - std.error * 1.96),
+    or_upper = exp(estimate + std.error * 1.96)) |>
+  filter(term == "victim_sexMale") |>
+  select(city_state, term, or_estimate, or_lower, or_upper)
+
+
+city_state_glm_results |>
+  mutate(city_state = fct_reorder(city_state, or_estimate)) |>
+  ggplot(aes(x = city_state, y = or_estimate)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = or_lower,
+                    ymax = or_upper)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  labs(
+    title = "Adjusted OR Estimates by City for Solving Homicides: Male vs Female Victims",
+    x = "City",
+    y = "Adjusted Odds Ratio")
+```
+
+Keeping all other variables fixed, New York, NY has the lowest adjusted odds ratio at 0.26 (95% CI: 0.14, 0.50), while Albuquerque, NM has the highest at 1.77 (95% CI: 0.83, 3.76). This means the odds of a homicide being solved in New York when the victim is male is about 74% lower than when the victim is female. In Albuquerque, the odds of solving male victim homicides are about 77% higher than the odds of solving a female victim homicide.
+
+# Problem 2
+
