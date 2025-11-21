@@ -5,6 +5,7 @@ output: github_document
 
 ```{r message=FALSE, warning=FALSE}
 library(tidyverse)
+library(p8105.datasets)
 ```
 
 
@@ -85,7 +86,54 @@ city_state_glm_results |>
     y = "Adjusted Odds Ratio")
 ```
 
-Keeping all other variables fixed, New York, NY has the lowest adjusted odds ratio at 0.26 (95% CI: 0.14, 0.50), while Albuquerque, NM has the highest at 1.77 (95% CI: 0.83, 3.76). This means the odds of a homicide being solved in New York when the victim is male is about 74% lower than when the victim is female. In Albuquerque, the odds of solving male victim homicides are about 77% higher than the odds of solving a female victim homicide.
+Keeping all other variables fixed, New York, NY has the lowest adjusted odds ratio at 0.26 (95% CI: 0.14, 0.50), while Albuquerque, NM has the highest at 1.77 (95% CI: 0.83, 3.76). In New York, this indicates that the odds of solving a homicide with a male victim are about 74% lower (95% CI: 50% to 86% lower) than the odds of solving a homicide with a female victim. In Albuquerque, the odds of solving homicides with male victims are about 77% higher (95% CI: 14% lower to 376% higher) than for female victims.
 
 # Problem 2
+
+```{r}
+data("weather_df")
+
+set.seed(6)
+```
+
+```{r}
+boot_straps =
+  weather_df |>
+  modelr::bootstrap(n = 500) # Change to 5000 !!!
+```
+
+```{r}
+boot_strap_results =
+  boot_straps |>
+  mutate(
+    lm_fits = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
+    glance_results = map(lm_fits, broom::glance),
+    tidy_results = map(lm_fits, broom::tidy)) |>
+  select(-strap, -lm_fits) |>
+  unnest(
+    c(glance_results, tidy_results), 
+    names_sep = "_") |>
+  select(
+    .id, 
+    tidy_results_term, 
+    tidy_results_estimate, 
+    glance_results_r.squared) |>
+  filter(tidy_results_term != "(Intercept)") |>
+  pivot_wider(
+    names_from = "tidy_results_term",
+    values_from = "tidy_results_estimate") |>
+  rename(r.squared = glance_results_r.squared) |>
+  mutate(
+    tmin_prcp_ratio = tmin / prcp)
+```
+
+```{r}
+boot_strap_results |>
+  ggplot(aes(x = r.squared)) +
+  geom_histogram()
+
+boot_strap_results |>
+  ggplot(aes(x = tmin_prcp_ratio)) +
+  geom_histogram()
+```
 
